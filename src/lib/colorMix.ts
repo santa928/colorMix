@@ -1,5 +1,5 @@
 import type { BaseColor, PigmentVector } from '../data/baseColors';
-import { describeMixedColor, type RgbColor } from './colorNames';
+import { describeMixedColor, type ColorNameHints, type RgbColor } from './colorNames';
 
 export type AmountMode = 'normal' | 'extra';
 
@@ -73,26 +73,35 @@ export function resolveMixedColor(mix: PigmentMix): ResolvedMixedColor {
     };
   }
 
-  const rgb = pigmentsToRgb(mix.pigments, mix.totalWeight);
+  const rgb = pigmentsToRgb(mix.pigments);
 
   return {
     rgb,
     hex: rgbToHex(rgb),
-    label: describeMixedColor(rgb),
+    label: describeMixedColor(rgb, buildColorNameHints(mix.pigments)),
   };
 }
 
 /**
  * Approximates paint mixing by blending pigment totals on a simple RYB wheel.
  */
-function pigmentsToRgb(pigments: PigmentVector, totalWeight: number): RgbColor {
+function pigmentsToRgb(pigments: PigmentVector): RgbColor {
   const chromaWeight = pigments.red + pigments.yellow + pigments.blue;
-  const whiteRatio = pigments.white / totalWeight;
-  const blackRatio = pigments.black / totalWeight;
-  const multiColorRatio =
-    countActivePigments(pigments) > 2 ? Math.min(0.18, (chromaWeight / totalWeight) * 0.18) : 0;
+  const totalPigmentWeight =
+    pigments.red + pigments.yellow + pigments.blue + pigments.white + pigments.black;
 
-  let base = { r: 245, g: 239, b: 230 };
+  if (totalPigmentWeight === 0) {
+    return { r: 245, g: 239, b: 230 };
+  }
+
+  const whiteRatio = pigments.white / totalPigmentWeight;
+  const chromaRatio = chromaWeight / totalPigmentWeight;
+  const multiColorRatio =
+    countActivePigments(pigments) > 2 && chromaWeight > 0
+      ? Math.min(0.08, chromaRatio * 0.08)
+      : 0;
+
+  let base = { r: 0, g: 0, b: 0 };
 
   if (chromaWeight > 0) {
     const ryb = {
@@ -105,15 +114,37 @@ function pigmentsToRgb(pigments: PigmentVector, totalWeight: number): RgbColor {
   }
 
   return normalizeRgb({
-    r: base.r * (1 - blackRatio * 0.72) + 255 * whiteRatio * 0.72 + 12 * multiColorRatio,
-    g: base.g * (1 - blackRatio * 0.72) + 250 * whiteRatio * 0.72 + 10 * multiColorRatio,
-    b: base.b * (1 - blackRatio * 0.72) + 245 * whiteRatio * 0.72 + 8 * multiColorRatio,
+    r: base.r * chromaRatio + 255 * whiteRatio + 8 * multiColorRatio,
+    g: base.g * chromaRatio + 255 * whiteRatio + 6 * multiColorRatio,
+    b: base.b * chromaRatio + 255 * whiteRatio + 4 * multiColorRatio,
   });
 }
 
 function countActivePigments(pigments: PigmentVector): number {
   return [pigments.red, pigments.yellow, pigments.blue].filter((value) => value > 0)
     .length;
+}
+
+function buildColorNameHints(pigments: PigmentVector): ColorNameHints {
+  const chromaEntries = [
+    ['red', pigments.red],
+    ['yellow', pigments.yellow],
+    ['blue', pigments.blue],
+  ] as const;
+  const chromaWeight = chromaEntries.reduce((sum, [, value]) => sum + value, 0);
+
+  if (chromaWeight === 0) {
+    return {};
+  }
+
+  const [dominantPigment, dominantWeight] = chromaEntries.reduce((current, candidate) =>
+    candidate[1] > current[1] ? candidate : current,
+  );
+
+  return {
+    dominantPigment,
+    dominantRatio: dominantWeight / chromaWeight,
+  };
 }
 
 function normalizeRgb(rgb: { r: number; g: number; b: number }): RgbColor {

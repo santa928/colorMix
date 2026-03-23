@@ -4,10 +4,15 @@ export interface RgbColor {
   b: number;
 }
 
+export interface ColorNameHints {
+  dominantPigment?: 'red' | 'yellow' | 'blue';
+  dominantRatio?: number;
+}
+
 /**
- * Returns a child-friendly Japanese color name from the 12-color palette.
+ * Returns a child-friendly Japanese color name for the mixed paint result.
  */
-export function describeMixedColor(rgb: RgbColor): string {
+export function describeMixedColor(rgb: RgbColor, hints?: ColorNameHints): string {
   const { hue, saturation, lightness } = rgbToHsl(rgb);
 
   if (lightness >= 0.92 || (saturation <= 0.08 && lightness >= 0.84)) {
@@ -18,8 +23,22 @@ export function describeMixedColor(rgb: RgbColor): string {
     return 'くろっぽい';
   }
 
+  if (saturation <= 0.12) {
+    return 'はいいろっぽい';
+  }
+
   if (hue >= 300 && lightness >= 0.72) {
     return 'ももっぽい';
+  }
+
+  if (saturation >= 0.45 && hints?.dominantRatio !== undefined && hints.dominantRatio >= 0.75) {
+    if (hints.dominantPigment === 'red') {
+      return 'あかっぽい';
+    }
+
+    if (hints.dominantPigment === 'blue') {
+      return 'あおっぽい';
+    }
   }
 
   if (hue >= 18 && hue < 42) {
